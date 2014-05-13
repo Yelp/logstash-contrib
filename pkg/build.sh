@@ -2,6 +2,7 @@
 # We only need to build two packages now, rpm and deb.  Leaving the os/version stuff in case things change.
 
 basedir=$(dirname $0)/../
+abs_basedir=$(readlink -f $basedir)
 tmpdir=$basedir/tmp
 mkdir -p $tmpdir
 
@@ -33,7 +34,6 @@ echo "Building package for $os $release"
 
 destdir=build/$(echo "$os" | tr ' ' '_')
 prefix=/opt/logstash
-
 if [ "$destdir/$prefix" != "/" -a -d "$destdir/$prefix" ] ; then
   rm -rf "$destdir/$prefix"
 fi
@@ -42,8 +42,10 @@ mkdir -p $destdir/$prefix
 
 # Deploy the tarball to /opt/logstash
 tar="$destdir/logstash-contrib-$VERSION.tar.gz"
+echo $tar
 if [ ! -f "$tar" ] ; then
-  make -C $basedir build/logstash-contrib-$VERSION.tar.gz || exit 1
+  make -C $basedir tarball || exit 1
+  mv "build/logstash-contrib-$VERSION.tar.gz" $tar
 fi
 
 WGET=$(which wget 2>/dev/null)
@@ -54,7 +56,7 @@ CURL=$(which curl 2>/dev/null)
 if [ "x$WGET" != "x" ]; then
   DOWNLOAD_COMMAND="wget -q -c -O"
 elif [ "x$CURL" != "x" ]; then
-    DOWNLOAD_COMMAND="curl -s -C -L -o"
+  DOWNLOAD_COMMAND="curl -s -C -L -o"
 else
   echo "wget or curl are required."
   exit 1
@@ -72,13 +74,12 @@ if [ ! -f "${TARGET}" ]; then
   echo "Exiting."
   exit 1
 fi
-
 tar -C $tmpdir -zxf $TARGET
 tar -C $tmpdir -zxf $tar
 
 cd $tmpdir
 
-###
+##
 ### Epic one-liner used to find files that exist in contrib and NOT have a match 
 ### in core.  
 ### This finds all files in both extracted tarballs and counts file occurrences,
@@ -102,11 +103,12 @@ cd $tmpdir
 
 PKGFILES=$(find */ -type f | sort -t / -k 2 | tr '/' '\t' | uniq -f 1 -c | tr '\t' '/' | sort -t / -s -k 1n | awk '{print $1, $2}' | grep ^1 | grep logstash-contrib | awk '{print $2}' | sed -e "s#logstash-contrib-${VERSION}/##" -e "s#^/##" )
 
+
 cd logstash-contrib-${VERSION}
+echo $basedir
+rsync -R ${PKGFILES} $abs_basedir/$destdir/$prefix
 
-rsync -R ${PKGFILES} $basedir/$destdir/$prefix
-
-cd $basedir
+cd $abs_basedir
 
 case $os in
   centos|fedora|redhat|sl) 
@@ -130,7 +132,7 @@ case $os in
     fi
 
     fpm -s dir -t deb -n logstash-contrib -v "$RELEASE" \
-      -a all --iteration "1-${DEB_REVISION}" --ignore-iteration-in-dependencies \
+      -a all --iteration "1-${DEB_REVISION}" --deb-ignore-iteration-in-dependencies \
       --url "$URL" \
       --description "$DESCRIPTION" \
       --vendor "Elasticsearch" \
