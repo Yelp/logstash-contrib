@@ -20,8 +20,8 @@ fi
 URL="http://github.com/elasticsearch/logstash-contrib"
 DESCRIPTION="Community contributed plugins for Logstash"
 
-if [ "$#" -ne 2 ] ; then
-  echo "Usage: $0 <os> <release>"
+if [ "$#" -ne 2 -a "$#" -ne 3 ] ; then
+  echo "Usage: $0 <os> <release> [logstash-tarball]"
   echo 
   echo "Example: $0 ubuntu 12.10"
   exit 1
@@ -29,8 +29,19 @@ fi
 
 os=$1
 release=$2
+tarball=$3
 
 echo "Building package for $os $release"
+
+if [ ! -z $tarball ]; then
+  echo "Using logstash $tarball"
+  filename=$(basename "$tarball")
+  filename="${filename%.*}"
+  LS_VERSION="${filename#logstash_}"
+  LS_VERSION="${LS_VERSION%_*}"
+else
+  LS_VERSION=$VERSION
+fi
 
 destdir=build/$(echo "$os" | tr ' ' '_')
 prefix=/opt/logstash
@@ -48,32 +59,37 @@ if [ ! -f "$tar" ] ; then
   mv "build/logstash-contrib-$VERSION.tar.gz" $tar
 fi
 
-WGET=$(which wget 2>/dev/null)
-CURL=$(which curl 2>/dev/null)
+if [ -z $tarball ]; then
+  WGET=$(which wget 2>/dev/null)
+  CURL=$(which curl 2>/dev/null)
 
-[ -z "$URLSTUB" ] && URLSTUB="http://download.elasticsearch.org/logstash/logstash/"
+  [ -z "$URLSTUB" ] && URLSTUB="http://download.elasticsearch.org/logstash/logstash/"
 
-if [ "x$WGET" != "x" ]; then
-  DOWNLOAD_COMMAND="wget -q -c -O"
-elif [ "x$CURL" != "x" ]; then
-  DOWNLOAD_COMMAND="curl -s -C -L -o"
+  if [ "x$WGET" != "x" ]; then
+    DOWNLOAD_COMMAND="wget -q -c -O"
+  elif [ "x$CURL" != "x" ]; then
+    DOWNLOAD_COMMAND="curl -s -C -L -o"
+  else
+    echo "wget or curl are required."
+    exit 1
+  fi
+
+  TARGETDIR="$tmpdir"
+  SUFFIX=".tar.gz"
+  FILEPATH="logstash-${VERSION}"
+  FILENAME=${FILEPATH}${SUFFIX}
+  TARGET="${tmpdir}/${FILENAME}"
+
+  $DOWNLOAD_COMMAND ${TARGET} ${URLSTUB}${FILENAME}
+  if [ ! -f "${TARGET}" ]; then
+    echo "ERROR: Unable to download ${URLSTUB}${FILENAME}"
+    echo "Exiting."
+    exit 1
+  fi
 else
-  echo "wget or curl are required."
-  exit 1
-fi
+  $TARGET=$tarball
+fi # tarball
 
-TARGETDIR="$tmpdir"
-SUFFIX=".tar.gz"
-FILEPATH="logstash-${VERSION}"
-FILENAME=${FILEPATH}${SUFFIX}
-TARGET="${tmpdir}/${FILENAME}"
-
-$DOWNLOAD_COMMAND ${TARGET} ${URLSTUB}${FILENAME}
-if [ ! -f "${TARGET}" ]; then
-  echo "ERROR: Unable to download ${URLSTUB}${FILENAME}"
-  echo "Exiting."
-  exit 1
-fi
 tar -C $tmpdir -zxf $TARGET
 tar -C $tmpdir -zxf $tar
 
@@ -116,6 +132,7 @@ case $os in
       -a noarch --iteration "1_${RPM_REVISION}" --ignore-iteration-in-dependencies \
       --url "$URL" \
       --description "$DESCRIPTION" \
+      -d "logstash = $RELEASE" \
       --vendor "Elasticsearch" \
       --license "Apache 2.0" \
       --rpm-use-file-permissions \
@@ -136,6 +153,7 @@ case $os in
       --description "$DESCRIPTION" \
       --vendor "Elasticsearch" \
       --license "Apache 2.0" \
+      -d "logstash(= $LS_VERSION)" \
       --deb-user root --deb-group root \
       -f -C $destdir .
     ;;
