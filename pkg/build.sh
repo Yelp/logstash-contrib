@@ -116,7 +116,6 @@ case $os in
       -a noarch --iteration "1_${RPM_REVISION}" --ignore-iteration-in-dependencies \
       --url "$URL" \
       --description "$DESCRIPTION" \
-      -d "logstash = $RELEASE" \
       --vendor "Elasticsearch" \
       --license "Apache 2.0" \
       --rpm-use-file-permissions \
@@ -137,7 +136,6 @@ case $os in
       --description "$DESCRIPTION" \
       --vendor "Elasticsearch" \
       --license "Apache 2.0" \
-      -d "logstash(= $VERSION)" \
       --deb-user root --deb-group root \
       -f -C $destdir .
     ;;
