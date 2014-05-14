@@ -20,7 +20,7 @@ fi
 URL="http://github.com/elasticsearch/logstash-contrib"
 DESCRIPTION="Community contributed plugins for Logstash"
 
-if [ "$#" -ne 2 -a "$#" -ne 3 ] ; then
+if [ "$#" -ne 2 -a "$#" -ne 3 -a "$#" -ne 4 ] ; then
   echo "Usage: $0 <os> <release> [logstash-tarball]"
   echo 
   echo "Example: $0 ubuntu 12.10"
@@ -29,18 +29,15 @@ fi
 
 os=$1
 release=$2
-tarball=$3
+LS_VERSION=$3
+tarball=$4
 
 echo "Building package for $os $release"
 
-if [ ! -z $tarball ]; then
-  echo "Using logstash $tarball"
-  filename=$(basename "$tarball")
-  filename="${filename%.*}"
-  LS_VERSION="${filename#logstash_}"
-  LS_VERSION="${LS_VERSION%_*}"
-else
+if [ -z $LS_VERSION ]; then
   LS_VERSION=$VERSION
+else
+  RELEASE=$LS_VERSION
 fi
 
 destdir=build/$(echo "$os" | tr ' ' '_')
@@ -87,7 +84,7 @@ if [ -z $tarball ]; then
     exit 1
   fi
 else
-  $TARGET=$tarball
+  TARGET=$tarball
 fi # tarball
 
 tar -C $tmpdir -zxf $TARGET
