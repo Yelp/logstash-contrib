@@ -2,8 +2,12 @@
 # We only need to build two packages now, rpm and deb.  Leaving the os/version stuff in case things change.
 
 basedir=$(dirname $0)/../
-abs_basedir=$(readlink -f $basedir)
 tmpdir=$basedir/tmp
+
+if [ -d $tmpdir ]; then
+    rm -rf $tmpdir
+fi
+
 mkdir -p $tmpdir
 
 [ ! -f $basedir/.VERSION.mk ] && make -C $basedir .VERSION.mk
@@ -15,7 +19,7 @@ URL="http://github.com/elasticsearch/logstash-contrib"
 DESCRIPTION="Community contributed plugins for Logstash"
 
 if [ "$#" -ne 2 -a "$#" -ne 3 -a "$#" -ne 4 ] ; then
-  echo "Usage: $0 <os> <release> [logstash-tarball]"
+  echo "Usage: $0 <os> <release> [logstash-version] [logstash-tarball]"
   echo 
   echo "Example: $0 ubuntu 12.10"
   exit 1
@@ -24,27 +28,33 @@ fi
 os=$1
 release=$2
 LS_VERSION=$3
+# We may want to use a custom logstash tarball
 tarball=$4
-
-if ! git show-ref --tags | grep -q "$(git rev-parse HEAD)"; then
-	# HEAD is not tagged, add the date, time and commit hash to the revision
-	BUILD_TIME="$(date +%Y%m%d%H%M)"
-	DEB_REVISION="${BUILD_TIME}~${REVISION}"
-	RPM_REVISION=".${BUILD_TIME}.${REVISION}"
-fi
-
-echo "Building package for $os $release"
 
 if [ -z $LS_VERSION ]; then
   LS_VERSION=$VERSION
+  if ! git show-ref --tags | grep -q "$(git rev-parse HEAD)"; then
+	# HEAD is not tagged, add the date, time and commit hash to the revision
+	BUILD_TIME="$(date +%Y%m%d%H%M)"
+	DEB_REVISION="-${BUILD_TIME}~${REVISION}"
+	RPM_REVISION=".${BUILD_TIME}.${REVISION}"
+  fi
 else
-  RELEASE="${LS_VERSION%%-*}"
-  DEB_REVISION="${LS_VERSION##*-}"
-  RPM_REVISION="${LS_VERSION##*-}"
+    # If we are building for a specific logstash version we want it 
+    # as dependency for contrib. We prefer to keep the same version
+    # between logstash and logstash-contrib. This will help the package manager.
+    RELEASE="${LS_VERSION%%-*}"
+    DEB_REVISION="${LS_VERSION#*-}"
+    RPM_REVISION=".${LS_VERSION##*.}"
 fi
 
+echo $DEB_REVISION
 
-destdir=build/$(echo "$os" | tr ' ' '_')
+echo "Building package for $os $release"
+
+
+
+destdir=build/$(echo "$os" | tr ' ' '_')-$release
 prefix=/opt/logstash
 if [ "$destdir/$prefix" != "/" -a -d "$destdir/$prefix" ] ; then
   rm -rf "$destdir/$prefix"
@@ -122,10 +132,14 @@ PKGFILES=$(find */ -type f | sort -t / -k 2 | tr '/' '\t' | uniq -f 1 -c | tr '\
 
 
 cd logstash-contrib-${VERSION}
-echo $basedir
-rsync -R ${PKGFILES} $abs_basedir/$destdir/$prefix
 
-cd $abs_basedir
+rsync -R ${PKGFILES} ../../$destdir/$prefix
+
+cd ../../
+# Clean up tmp. We don't need it anymore
+rm -rf $tmpdir
+
+
 
 case $os in
   centos|fedora|redhat|sl) 
@@ -149,7 +163,7 @@ case $os in
     fi
 
     fpm -s dir -t deb -n logstash-contrib -v "$RELEASE" \
-      -a all --iteration "1-${DEB_REVISION}" --deb-ignore-iteration-in-dependencies \
+      -a all --iteration "${DEB_REVISION}" --deb-ignore-iteration-in-dependencies \
       --url "$URL" \
       --description "$DESCRIPTION" \
       --vendor "Elasticsearch" \
