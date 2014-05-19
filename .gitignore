@@ -4,7 +4,7 @@ pkg/*.deb
 pkg/*.rpm
 *.class
 .rbx
-Gemfile.lock
+Gemfile*.lock
 .rbx
 *.tar.gz
 *.jar
